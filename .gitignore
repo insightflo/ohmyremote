@@ -5,4 +5,9 @@ coverage
 
 projects.json
 
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
 .env

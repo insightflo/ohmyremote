@@ -4,14 +4,15 @@ export interface TelegramMessageHandle {
   messageId: number;
 }
 
+export type InlineButton = { text: string; callback_data: string };
+
 export interface TelegramMessageTransport {
-  sendMessage(chatId: number, text: string): Promise<TelegramMessageHandle>;
-  editMessage(chatId: number, messageId: number, text: string): Promise<void>;
+  sendMessage(chatId: number, text: string, keyboard?: InlineButton[][]): Promise<TelegramMessageHandle>;
+  editMessage(chatId: number, messageId: number, text: string, keyboard?: InlineButton[][] | null): Promise<void>;
 }
 
 export interface StreamerOptions {
   editIntervalMs?: number;
-  chunkIntervalMs?: number;
   now?: () => number;
 }
 
@@ -22,25 +23,32 @@ export interface RunFinishSummary {
 }
 
 interface RunStreamState {
-  statusMessageId?: number;
+  runId: string;
+  startedAt: number;
+  progressMessageId?: number;
   lastEditAt: number;
-  lastChunkAt: number;
   textBuffer: string;
+  toolNames: string[];
 }
 
-const DEFAULT_EDIT_INTERVAL_MS = 1500;
-const DEFAULT_CHUNK_INTERVAL_MS = 5000;
+const DEFAULT_EDIT_INTERVAL_MS = 2000;
 const TELEGRAM_MAX_MESSAGE_LENGTH = 4096;
+
+function formatElapsed(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const remainder = s % 60;
+  return `${m}m ${remainder}s`;
+}
 
 export class TelegramRunStreamer {
   private readonly editIntervalMs: number;
-  private readonly chunkIntervalMs: number;
   private readonly now: () => number;
   private readonly states = new Map<string, RunStreamState>();
 
   public constructor(private readonly transport: TelegramMessageTransport, options: StreamerOptions = {}) {
     this.editIntervalMs = options.editIntervalMs ?? DEFAULT_EDIT_INTERVAL_MS;
-    this.chunkIntervalMs = options.chunkIntervalMs ?? DEFAULT_CHUNK_INTERVAL_MS;
     this.now = options.now ?? Date.now;
   }
 
@@ -52,21 +60,20 @@ export class TelegramRunStreamer {
       state.textBuffer += event.text;
     }
 
+    if (event.type === "tool_start") {
+      const name = (event as { toolName?: string }).toolName ?? "tool";
+      state.toolNames.push(name);
+    }
+
     if (event.type === "error") {
       const errorMsg = (event as { message?: string }).message ?? "Unknown error";
       await this.safeSend(chatId, `[Error] ${sanitizePlainText(errorMsg)}`);
+      return;
     }
 
     try {
       if (now - state.lastEditAt >= this.editIntervalMs) {
-        await this.sendOrEditStatus(chatId, runId, state, now);
-      }
-
-      if (state.textBuffer.length > 0 && now - state.lastChunkAt >= this.chunkIntervalMs) {
-        const chunk = sanitizePlainText(state.textBuffer);
-        state.textBuffer = "";
-        state.lastChunkAt = now;
-        await this.safeSend(chatId, chunk);
+        await this.updateProgress(chatId, state, now);
       }
     } catch (error) {
       console.warn(`[TelegramRunStreamer] handleEvent error for run ${runId}:`, String(error));
@@ -77,20 +84,44 @@ export class TelegramRunStreamer {
     const state = this.getState(runId);
 
     try {
-      if (state.textBuffer.length > 0) {
-        const chunk = sanitizePlainText(state.textBuffer);
-        state.textBuffer = "";
-        await this.safeSend(chatId, chunk);
+      const finalText = sanitizePlainText(state.textBuffer).trim();
+      const elapsed = formatElapsed(summary.durationMs);
+      const statusIcon = summary.status === "finished" ? "Done" : summary.status;
+      const footer = `\n\n[${statusIcon} in ${elapsed}]`;
+
+      if (finalText.length > 0) {
+        // Split long output into multiple messages
+        const chunks = splitText(finalText, TELEGRAM_MAX_MESSAGE_LENGTH - footer.length);
+
+        // First chunk: replace progress message (no keyboard)
+        const firstChunk = chunks[0] + (chunks.length === 1 ? footer : "");
+        if (state.progressMessageId !== undefined) {
+          try {
+            await this.transport.editMessage(chatId, state.progressMessageId, firstChunk, null);
+          } catch {
+            await this.safeSend(chatId, firstChunk);
+          }
+        } else {
+          await this.safeSend(chatId, firstChunk);
+        }
+
+        // Remaining chunks as new messages
+        for (let i = 1; i < chunks.length; i++) {
+          const text = chunks[i] + (i === chunks.length - 1 ? footer : "");
+          await this.safeSend(chatId, text);
+        }
+      } else {
+        const doneText = `${statusIcon} in ${elapsed}`;
+        if (state.progressMessageId !== undefined) {
+          try {
+            await this.transport.editMessage(chatId, state.progressMessageId, doneText, null);
+          } catch {
+            await this.safeSend(chatId, doneText);
+          }
+        } else {
+          await this.safeSend(chatId, doneText);
+        }
       }
-
-      const lines = [
-        `Run ${runId}`,
-        `status=${summary.status}`,
-        `duration_ms=${summary.durationMs}`,
-        `engine_session_id=${summary.engineSessionId ?? "unknown"}`,
-      ];
-
-      await this.safeSend(chatId, sanitizePlainText(lines.join("\n")));
     } catch (error) {
       console.warn(`[TelegramRunStreamer] finishRun error for run ${runId}:`, String(error));
     } finally {
@@ -105,9 +136,11 @@ export class TelegramRunStreamer {
     }
 
     const created: RunStreamState = {
+      runId,
+      startedAt: this.now(),
       lastEditAt: 0,
-      lastChunkAt: 0,
       textBuffer: "",
+      toolNames: [],
     };
     this.states.set(runId, created);
     return created;
@@ -122,34 +155,61 @@ export class TelegramRunStreamer {
     }
   }
 
-  private async sendOrEditStatus(chatId: number, runId: string, state: RunStreamState, now: number): Promise<void> {
-    const preview = state.textBuffer.slice(0, 120);
-    const statusText = sanitizePlainText(`Run ${runId}\npreview=${preview}`).slice(0, TELEGRAM_MAX_MESSAGE_LENGTH);
+  private async updateProgress(chatId: number, state: RunStreamState, now: number): Promise<void> {
+    const elapsed = formatElapsed(now - state.startedAt);
+    const preview = sanitizePlainText(state.textBuffer).slice(-300).trim();
+    const recentTools = state.toolNames.slice(-3);
+    const toolLine = recentTools.length > 0 ? `Tools: ${recentTools.join(", ")}\n` : "";
 
-    if (state.statusMessageId === undefined) {
+    const lines = [`Working... (${elapsed})`, toolLine, preview].filter(Boolean);
+    const statusText = lines.join("\n").slice(0, TELEGRAM_MAX_MESSAGE_LENGTH);
+
+    const stopButton: InlineButton[][] = [[{ text: "Stop", callback_data: `stop_run:${state.runId}` }]];
+
+    if (state.progressMessageId === undefined) {
       try {
-        const sent = await this.transport.sendMessage(chatId, statusText);
-        state.statusMessageId = sent.messageId;
+        const sent = await this.transport.sendMessage(chatId, statusText, stopButton);
+        state.progressMessageId = sent.messageId;
         state.lastEditAt = now;
       } catch (error) {
-        console.warn(`[TelegramRunStreamer] sendOrEditStatus send failed:`, String(error));
+        console.warn(`[TelegramRunStreamer] updateProgress send failed:`, String(error));
       }
       return;
     }
 
     try {
-      await this.transport.editMessage(chatId, state.statusMessageId, statusText);
+      await this.transport.editMessage(chatId, state.progressMessageId, statusText, stopButton);
       state.lastEditAt = now;
     } catch {
-      try {
-        const sent = await this.transport.sendMessage(chatId, statusText);
-        state.statusMessageId = sent.messageId;
-        state.lastEditAt = now;
-      } catch (error) {
-        console.warn(`[TelegramRunStreamer] sendOrEditStatus fallback send failed:`, String(error));
-      }
+      state.lastEditAt = now;
     }
   }
+}
+
+/** Split text into chunks at line boundaries when possible */
+function splitText(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return [text];
+
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLen) {
+      chunks.push(remaining);
+      break;
+    }
+
+    // Try to split at a newline near the limit
+    let splitAt = remaining.lastIndexOf("\n", maxLen);
+    if (splitAt <= 0 || splitAt < maxLen * 0.5) {
+      splitAt = maxLen;
+    }
+
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).replace(/^\n/, "");
+  }
+
+  return chunks;
 }
 
 export function sanitizePlainText(input: string): string {

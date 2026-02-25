@@ -13,6 +13,7 @@ export interface StorageRepository {
   }): Promise<void>;
   getProject(projectId: string): Promise<typeof projects.$inferSelect | undefined>;
   listProjects(): Promise<(typeof projects.$inferSelect)[]>;
+  deleteProject(projectId: string): Promise<void>;
   createChat(input: {
     id: string;
     projectId: string;
@@ -192,6 +193,27 @@ export class DrizzleStorageRepository implements StorageRepository {
 
   public async listProjects(): Promise<(typeof projects.$inferSelect)[]> {
     return this.db.select().from(projects).orderBy(asc(projects.createdAt));
+  }
+
+  public async deleteProject(projectId: string): Promise<void> {
+    // Delete in FK dependency order
+    const projectSessions = await this.db.select({ id: sessions.id }).from(sessions).where(eq(sessions.projectId, projectId));
+    const sessionIds = projectSessions.map((s) => s.id);
+
+    if (sessionIds.length > 0) {
+      const projectRuns = await this.db.select({ id: runs.id }).from(runs).where(eq(runs.projectId, projectId));
+      const runIds = projectRuns.map((r) => r.id);
+      for (const rid of runIds) {
+        await this.db.delete(runEvents).where(eq(runEvents.runId, rid));
+        await this.db.delete(jobs).where(eq(jobs.runId, rid));
+      }
+      await this.db.delete(runs).where(eq(runs.projectId, projectId));
+    }
+
+    await this.db.delete(files).where(eq(files.projectId, projectId));
+    await this.db.delete(sessions).where(eq(sessions.projectId, projectId));
+    await this.db.delete(chats).where(eq(chats.projectId, projectId));
+    await this.db.delete(projects).where(eq(projects.id, projectId));
   }
 
   public async createChat(input: {

@@ -29,6 +29,7 @@ export interface CreateBotOptions {
   runGateway: RunGateway;
   stopGateway: StopGateway;
   downloadGateway: DownloadGateway;
+  cancelRun?: (runId: string) => Promise<void>;
   store: ReturnType<typeof createTelegramDataStore>;
   reloadProjects?: () => Promise<{ count: number; configPath: string }>;
   killSwitchDisableRuns?: boolean;
@@ -94,6 +95,18 @@ export function createBot(token: string, options: CreateBotOptions) {
       return;
     }
 
+    // Handle stop_run: directly (not routed through handler)
+    if (data.startsWith("stop_run:") && options.cancelRun) {
+      const runId = data.slice("stop_run:".length);
+      try {
+        await options.cancelRun(runId);
+        try { await ctx.answerCallbackQuery({ text: "Stopping..." }); } catch { /* ignore */ }
+      } catch {
+        try { await ctx.answerCallbackQuery({ text: "Failed to stop" }); } catch { /* ignore */ }
+      }
+      return;
+    }
+
     let toast: string | undefined;
     try {
       const result = await handler.handleCallbackQuery(chatId, data, messageId);
@@ -154,12 +167,16 @@ export function createBot(token: string, options: CreateBotOptions) {
 
 function createTransport(bot: Bot): TelegramMessageTransport {
   return {
-    async sendMessage(chatId, text) {
-      const message = await bot.api.sendMessage(chatId, text);
+    async sendMessage(chatId, text, keyboard) {
+      const message = await bot.api.sendMessage(chatId, text, keyboard ? {
+        reply_markup: { inline_keyboard: keyboard },
+      } : undefined);
       return { messageId: message.message_id };
     },
-    async editMessage(chatId, messageId, text) {
-      await bot.api.editMessageText(chatId, messageId, text);
+    async editMessage(chatId, messageId, text, keyboard) {
+      await bot.api.editMessageText(chatId, messageId, text, {
+        reply_markup: keyboard ? { inline_keyboard: keyboard } : undefined,
+      });
     },
   };
 }
@@ -418,9 +435,20 @@ export async function startLongPolling(token: string): Promise<void> {
 
   const seedProjects = async (): Promise<number> => {
     const projectsConfig = ProjectsConfigSchema.parse(JSON.parse(await readFile(projectsConfigPath, "utf8")));
+    const configIds = new Set(projectsConfig.map((p) => p.id));
+
+    // Remove projects no longer in config
+    const existing = await repository.listProjects();
+    for (const proj of existing) {
+      if (!configIds.has(proj.id)) {
+        await repository.deleteProject(proj.id);
+      }
+    }
+
+    // Upsert projects from config
     for (const project of projectsConfig) {
-      const existing = await repository.getProject(project.id);
-      if (!existing) {
+      const ex = await repository.getProject(project.id);
+      if (!ex) {
         await repository.createProject({
           id: project.id,
           name: project.name,
@@ -507,6 +535,9 @@ export async function startLongPolling(token: string): Promise<void> {
     store,
     reloadProjects: async () => ({ count: await seedProjects(), configPath: projectsConfigPath }),
     killSwitchDisableRuns: process.env.KILL_SWITCH_DISABLE_RUNS === "true" || process.env.KILL_SWITCH_DISABLE_RUNS === "1",
+    cancelRun: async (runId) => {
+      await repository.cancelRun({ runId, now: Date.now() });
+    },
     auditSink: async (record) => {
       await repository.appendAuditLog({
         id: randomUUID(),
