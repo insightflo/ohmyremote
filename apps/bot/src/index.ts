@@ -195,6 +195,26 @@ function cleanEnvForEngine(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return cleaned;
 }
 
+function formatFriendlyError(errorMsg: string): string {
+  const lower = errorMsg.toLowerCase();
+  if (lower.includes("rate limit") || lower.includes("rate_limit") || lower.includes("429") || lower.includes("too many requests")) {
+    return "Rate limit hit. Wait a moment and try again.";
+  }
+  if (lower.includes("authentication") || lower.includes("unauthorized") || lower.includes("401") || lower.includes("api key")) {
+    return "Authentication error. Check your API key.";
+  }
+  if (lower.includes("quota") || lower.includes("billing") || lower.includes("insufficient") || lower.includes("402")) {
+    return "Quota/billing issue. Check your account.";
+  }
+  if (lower.includes("timeout") || lower.includes("timed out")) {
+    return "Request timed out. Try again.";
+  }
+  if (lower.includes("overloaded") || lower.includes("503") || lower.includes("529")) {
+    return "API overloaded. Try again shortly.";
+  }
+  return `Run failed: ${errorMsg.slice(0, 500)}`;
+}
+
 const DEFAULT_MAX_TURNS = 30;
 const IDLE_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes with no stdout → kill
 const CONTINUE_SESSION_MARKER = "__continue__";
@@ -687,7 +707,8 @@ export async function startLongPolling(token: string): Promise<void> {
       const errorMsg = errorEvents.length > 0
         ? (errorEvents[0] as { message?: string }).message ?? "Unknown error"
         : "Unknown error";
-      await notifyChat(chatId, `Run failed: ${errorMsg.slice(0, 500)}`);
+      const friendlyMsg = formatFriendlyError(errorMsg);
+      await notifyChat(chatId, friendlyMsg);
     }
 
     if (execResult.engineSessionId) {

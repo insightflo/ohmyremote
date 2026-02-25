@@ -156,6 +156,25 @@ export function parseClaudeJsonOutput(output: string): ClaudeJsonResponse {
   };
 }
 
+function extractErrorMessage(parsed: Record<string, unknown>): string {
+  // Try common error fields in priority order
+  if (typeof parsed.error === "string" && parsed.error.length > 0) return parsed.error;
+  if (typeof parsed.message === "string" && parsed.message.length > 0) return parsed.message;
+  if (typeof parsed.body === "string" && parsed.body.length > 0) return parsed.body;
+
+  // Error might be an object with its own message
+  if (parsed.error && typeof parsed.error === "object") {
+    const errObj = parsed.error as Record<string, unknown>;
+    if (typeof errObj.message === "string") return errObj.message;
+    if (typeof errObj.type === "string") return errObj.type;
+    return JSON.stringify(parsed.error).slice(0, 500);
+  }
+
+  // Last resort: stringify the whole parsed object for debugging
+  const raw = JSON.stringify(parsed).slice(0, 500);
+  return `Claude error: ${raw}`;
+}
+
 function translateClaudeLineToEvents(parsed: Record<string, unknown>): NormalizedEngineEvent[] {
   const type = parsed.type as string;
 
@@ -220,12 +239,8 @@ function translateClaudeLineToEvents(parsed: Record<string, unknown>): Normalize
 
     // If result contains an error message, emit error event before run_finished
     if (status === "error") {
-      const errorMsg = typeof parsed.error === "string" ? parsed.error
-        : typeof parsed.message === "string" ? parsed.message
-        : undefined;
-      if (errorMsg) {
-        events.push({ type: "error", message: errorMsg, raw: parsed });
-      }
+      const errorMsg = extractErrorMessage(parsed);
+      events.push({ type: "error", message: errorMsg, raw: parsed });
     }
 
     events.push({ type: "run_finished", status, raw: parsed });
@@ -234,10 +249,7 @@ function translateClaudeLineToEvents(parsed: Record<string, unknown>): Normalize
 
   // Handle explicit error events from Claude CLI
   if (type === "error") {
-    const message = typeof parsed.error === "string" ? parsed.error
-      : typeof parsed.message === "string" ? parsed.message
-      : typeof parsed.body === "string" ? parsed.body
-      : "Unknown Claude error";
+    const message = extractErrorMessage(parsed);
     return [{ type: "error", message, raw: parsed }];
   }
 
