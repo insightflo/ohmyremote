@@ -66,6 +66,33 @@ pnpm start
 
 ## Configuration
 
+### Setting up Telegram Bot
+
+1. **Create a bot** — Open Telegram, search for [@BotFather](https://t.me/BotFather), send `/newbot`, and follow the prompts. Copy the bot token.
+
+2. **Get your user ID** — Send any message to [@userinfobot](https://t.me/userinfobot). It will reply with your numeric user ID. This ID restricts the bot so only you can control it.
+
+3. **Configure `.env`** — Copy the example and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+```env
+# Required
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234...    # from @BotFather
+TELEGRAM_OWNER_USER_ID=987654321            # from @userinfobot
+
+# Optional
+DATA_DIR=./data                              # SQLite database location
+PROJECTS_CONFIG_PATH=./config/projects.json  # project list path
+DASHBOARD_PORT=4312                          # web dashboard port
+DASHBOARD_BIND_HOST=127.0.0.1               # bind address (localhost only)
+# DASHBOARD_BASIC_AUTH_USER=admin            # dashboard basic auth
+# DASHBOARD_BASIC_AUTH_PASS=password
+# KILL_SWITCH_DISABLE_RUNS=false             # emergency stop for all runs
+```
+
 ### Environment Variables
 
 | Variable | Required | Default | Description |
