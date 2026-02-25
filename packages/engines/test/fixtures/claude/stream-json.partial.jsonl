@@ -1,0 +1,5 @@
+{"type":"run_started","runId":"run-1","session_id":"sess_stream_123"}
+{"type":"text_delta","text":"Hello"}
+{bad json line}
+{"type":"text_delta","text":" world"}
+{"type":"run_finished","status":"success"}

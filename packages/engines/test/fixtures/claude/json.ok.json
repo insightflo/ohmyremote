@@ -1,0 +1,8 @@
+{
+  "result": "Hello from Claude",
+  "session_id": "sess_claude_123",
+  "usage": {
+    "input_tokens": 12,
+    "output_tokens": 34
+  }
+}

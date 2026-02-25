@@ -1,0 +1,15 @@
+[
+    {
+        "id": "proj1",
+        "name": "Claude Project",
+        "rootPath": "/home/user/projects/my-project",
+        "defaultEngine": "claude"
+    },
+    {
+        "id": "proj2",
+        "name": "OpenCode Project",
+        "rootPath": "/home/user/projects/opencode-project",
+        "defaultEngine": "opencode",
+        "opencodeAttachUrl": "http://localhost:3000"
+    }
+]

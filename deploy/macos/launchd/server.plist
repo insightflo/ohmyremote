@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>ai.ohmyremote.server</string>
+    <key>WorkingDirectory</key>
+    <string>__PROJECT_ROOT__</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>__PNPM_BIN__</string>
+      <string>--filter</string>
+      <string>@ohmyremote/server</string>
+      <string>start</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PROJECTS_CONFIG_PATH</key>
+      <string>__PROJECT_ROOT__/config/projects.example.json</string>
+      <key>DATA_DIR</key>
+      <string>__PROJECT_ROOT__/data</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/ohmyremote-server.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/ohmyremote-server.err.log</string>
+  </dict>
+</plist>

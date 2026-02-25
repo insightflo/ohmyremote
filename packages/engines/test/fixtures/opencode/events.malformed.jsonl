@@ -1,0 +1,5 @@
+{"type":"started","sessionID":"sess_upper_bad"}
+not-json
+{"type":"text.delta","delta":"partial"}
+{
+{"type":"finished","status":"error","sessionId":"sess_lower_bad"}

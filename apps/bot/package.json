@@ -1,0 +1,20 @@
+{
+  "name": "@ohmyremote/bot",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/bot.test.js",
+    "typecheck": "tsc --noEmit",
+    "start": "tsx src/main.ts",
+    "send-test": "tsx src/send-test.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "grammy": "^1.35.0",
+    "@ohmyremote/telegram": "workspace:*",
+    "@ohmyremote/core": "workspace:*",
+    "@ohmyremote/storage": "workspace:*",
+    "@ohmyremote/engines": "workspace:*"
+  }
+}

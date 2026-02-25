@@ -1,0 +1,8 @@
+{"type":"started","sessionID":"sess_upper_1","runId":"run_1"}
+{"type":"text.delta","delta":"Hello "}
+{"type":"text_delta","text":"OpenCode"}
+{"type":"tool.start","name":"Read","callId":"tool_1","input":{"path":"README.md"}}
+{"type":"tool.end","name":"Read","callId":"tool_1","output":{"ok":true}}
+{"type":"file_uploaded","filePath":"/tmp/upload.txt","fileName":"upload.txt","sizeBytes":10,"url":"https://example.test/upload.txt"}
+{"type":"file_downloaded","filePath":"/tmp/download.txt","fileName":"download.txt","sizeBytes":5}
+{"type":"finished","status":"success","sessionId":"sess_lower_2"}

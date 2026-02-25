@@ -1,0 +1,18 @@
+{
+  "name": "@ohmyremote/server",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "dotenv": "^17.3.1",
+    "zod": "^4.3.6",
+    "@ohmyremote/core": "workspace:*",
+    "@ohmyremote/storage": "workspace:*"
+  }
+}
