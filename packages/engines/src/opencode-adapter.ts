@@ -154,7 +154,9 @@ function mapOpenCodeEvent(rawEvent: unknown): NormalizedEngineEvent | null {
     case "text_delta":
     case "message_delta":
     case "output_text_delta": {
-      const text = firstString(rawEvent.text, rawEvent.delta, rawEvent.content, rawEvent.message);
+      // OpenCode wraps text in part.text
+      const part = isRecord(rawEvent.part) ? rawEvent.part : undefined;
+      const text = firstString(part?.text, rawEvent.text, rawEvent.delta, rawEvent.content, rawEvent.message);
       if (text === undefined) {
         return null;
       }
@@ -163,6 +165,30 @@ function mapOpenCodeEvent(rawEvent: unknown): NormalizedEngineEvent | null {
         type: "text_delta",
         text,
         channel: firstString(rawEvent.channel),
+        raw: rawEvent,
+      };
+    }
+    case "tool_use": {
+      // OpenCode emits tool_use with part.tool and part.state
+      const part = isRecord(rawEvent.part) ? rawEvent.part : undefined;
+      const toolName = firstString(part?.tool, extractToolName(rawEvent));
+      if (toolName === undefined) return null;
+      const state = isRecord(part?.state) ? part!.state : undefined;
+      const status = firstString(state?.status);
+      if (status === "pending" || status === undefined) {
+        return {
+          type: "tool_start",
+          toolName,
+          callId: firstString(part?.callID, rawEvent.callId, rawEvent.call_id),
+          input: state?.input,
+          raw: rawEvent,
+        };
+      }
+      return {
+        type: "tool_end",
+        toolName,
+        callId: firstString(part?.callID, rawEvent.callId, rawEvent.call_id),
+        output: state?.output ?? state?.error,
         raw: rawEvent,
       };
     }
@@ -200,6 +226,10 @@ function mapOpenCodeEvent(rawEvent: unknown): NormalizedEngineEvent | null {
         raw: rawEvent,
       };
     }
+    case "step_start":
+    case "step_finish":
+      // OpenCode step lifecycle — skip silently
+      return null;
     case "error":
     case "run_error": {
       const message = firstString(rawEvent.message, rawEvent.error);
