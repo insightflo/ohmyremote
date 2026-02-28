@@ -70,9 +70,22 @@ export class ProcessRunner {
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
+    // Attach a temporary error handler immediately to prevent unhandled 'error'
+    // events from crashing the process if spawn fails (e.g. ENOENT).
+    let spawnError: Error | undefined;
+    const earlyErrorHandler = (err: Error): void => { spawnError = err; };
+    child.once('error', earlyErrorHandler);
+
     if (child.pid === undefined) {
+      // Remove early handler so it doesn't interfere with later listeners
+      child.removeListener('error', earlyErrorHandler);
+      // Drain the error event to prevent unhandled 'error' crash
+      child.once('error', () => {});
       throw new Error(`failed to start process for session ${options.sessionId}`);
     }
+
+    // Remove the early handler — the promise-based handler below will take over
+    child.removeListener('error', earlyErrorHandler);
 
     options.onLifecycle?.({
       status: 'running',

@@ -1,0 +1,57 @@
+entries:
+  - date: "2026-02-25T07:08:22"
+    type: docs
+    domain: root
+    files:
+      - README_ko.md
+    description: Add documentation README_ko.md
+    impact:
+      - none
+  - date: "2026-02-28T00:33:18"
+    type: docs
+    domain: .claude
+    files:
+      - .claude/memory/project.md
+    description: Add documentation project.md
+    impact:
+      - none
+  - date: "2026-02-28T00:33:38"
+    type: docs
+    domain: .claude
+    files:
+      - .claude/memory/preferences.md
+    description: Add documentation preferences.md
+    impact:
+      - none
+  - date: "2026-02-28T00:33:56"
+    type: docs
+    domain: .claude
+    files:
+      - .claude/memory/patterns.md
+    description: Add documentation patterns.md
+    impact:
+      - none
+  - date: "2026-02-28T00:34:47"
+    type: docs
+    domain: .claude
+    files:
+      - .claude/memory/decisions.md
+    description: Add documentation decisions.md
+    impact:
+      - none
+  - date: "2026-02-28T00:35:16"
+    type: docs
+    domain: .claude
+    files:
+      - .claude/memory/learnings.md
+    description: Add documentation learnings.md
+    impact:
+      - none
+  - date: "2026-02-28T00:35:31"
+    type: docs
+    domain: .claude
+    files:
+      - .claude/memory/user-profile.md
+    description: Add documentation user-profile.md
+    impact:
+      - none

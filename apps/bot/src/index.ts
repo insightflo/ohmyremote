@@ -192,6 +192,16 @@ function isToolUnsafeEnabled(unsafeUntil: number | undefined, now: number): bool
 function cleanEnvForEngine(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const cleaned = { ...env };
   delete cleaned.CLAUDECODE;
+
+  // Ensure common binary directories are in PATH so spawned engines
+  // (claude, opencode) can be found even when the bot runs outside a login shell.
+  const extraPaths = ["/opt/homebrew/bin", "/usr/local/bin"];
+  const currentPath = cleaned.PATH ?? "";
+  const missing = extraPaths.filter((p) => !currentPath.split(":").includes(p));
+  if (missing.length > 0) {
+    cleaned.PATH = [...missing, currentPath].join(":");
+  }
+
   return cleaned;
 }
 
@@ -216,7 +226,8 @@ function formatFriendlyError(errorMsg: string): string {
 }
 
 const DEFAULT_MAX_TURNS = 30;
-const IDLE_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes with no stdout → kill
+const IDLE_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes with no stdout → kill (claude)
+const OPENCODE_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes for opencode (events can be sparse)
 const CONTINUE_SESSION_MARKER = "__continue__";
 
 async function runClaude(input: {
@@ -375,9 +386,9 @@ async function runOpenCode(input: {
   });
 
   const poll = setInterval(() => {
-    // Kill if idle too long (same as Claude)
-    if (Date.now() - lastActivityAt > IDLE_TIMEOUT_MS) {
-      console.warn(`[runOpenCode] idle timeout reached (${IDLE_TIMEOUT_MS}ms), cancelling`);
+    // Kill if idle too long (opencode events can be sparse)
+    if (Date.now() - lastActivityAt > OPENCODE_IDLE_TIMEOUT_MS) {
+      console.warn(`[runOpenCode] idle timeout reached (${OPENCODE_IDLE_TIMEOUT_MS}ms), cancelling`);
       handle.cancel();
       return;
     }
