@@ -81,7 +81,13 @@ export class ProcessRunner {
       child.removeListener('error', earlyErrorHandler);
       // Drain the error event to prevent unhandled 'error' crash
       child.once('error', () => {});
-      throw new Error(`failed to start process for session ${options.sessionId}`);
+
+      const detail = spawnError
+        ? `: ${spawnError.message}`
+        : '';
+      throw new Error(
+        `failed to start process for session ${options.sessionId}${detail} (command=${options.command})`
+      );
     }
 
     // Remove the early handler — the promise-based handler below will take over

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { ProcessRunner, ProjectsConfigSchema, type NormalizedEngineEvent } from "@ohmyremote/core";
@@ -195,7 +196,12 @@ function cleanEnvForEngine(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 
   // Ensure common binary directories are in PATH so spawned engines
   // (claude, opencode) can be found even when the bot runs outside a login shell.
-  const extraPaths = ["/opt/homebrew/bin", "/usr/local/bin"];
+  const extraPaths = [
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    path.join(homedir(), ".local", "bin"),
+    path.join(homedir(), "bin"),
+  ];
   const currentPath = cleaned.PATH ?? "";
   const missing = extraPaths.filter((p) => !currentPath.split(":").includes(p));
   if (missing.length > 0) {
