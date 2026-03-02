@@ -2,6 +2,7 @@ import {
   createLineDecoder,
   type EngineRunStatus,
   type NormalizedEngineEvent,
+  parseNormalizedEngineEvent,
 } from "@ohmyremote/core";
 
 export const CLAUDE_SAFE_ALLOWED_TOOLS = ["Read", "Glob", "Grep"] as const;
@@ -157,6 +158,10 @@ export function parseClaudeJsonOutput(output: string): ClaudeJsonResponse {
 }
 
 function extractErrorMessage(parsed: Record<string, unknown>): string {
+  // Claude CLI sometimes returns subtype=success while is_error=true.
+  // In that case, the most useful message is usually in the `result` field.
+  if (typeof parsed.result === "string" && parsed.result.length > 0) return parsed.result;
+
   // Try common error fields in priority order
   if (typeof parsed.error === "string" && parsed.error.length > 0) return parsed.error;
   if (typeof parsed.message === "string" && parsed.message.length > 0) return parsed.message;
@@ -234,7 +239,12 @@ function translateClaudeLineToEvents(parsed: Record<string, unknown>): Normalize
 
   if (type === "result") {
     const subtype = parsed.subtype as string | undefined;
-    const status: EngineRunStatus = subtype === "success" ? "success" : subtype === "error" ? "error" : "unknown";
+    const isError = parsed.is_error === true;
+    const status: EngineRunStatus = subtype === "error" || isError
+      ? "error"
+      : subtype === "success"
+        ? "success"
+        : "unknown";
     const events: NormalizedEngineEvent[] = [];
 
     // If result contains an error message, emit error event before run_finished
@@ -278,13 +288,24 @@ export function createClaudeStreamJsonParser(): ClaudeStreamJsonParser {
       latestEngineSessionId = parsed.session_id;
     }
 
-    const translated = translateClaudeLineToEvents(parsed);
-    for (const event of translated) {
+    const pushEvent = (event: NormalizedEngineEvent): void => {
       if (event.type === "run_finished") {
-        if (runFinishedEmitted) continue;
+        if (runFinishedEmitted) return;
         runFinishedEmitted = true;
       }
       events.push(event);
+    };
+
+    // Allow already-normalized events to pass through (used by tests and internal tooling).
+    const normalized = parseNormalizedEngineEvent(parsed);
+    if (normalized) {
+      pushEvent(normalized);
+      return;
+    }
+
+    const translated = translateClaudeLineToEvents(parsed);
+    for (const event of translated) {
+      pushEvent(event);
     }
   };
 

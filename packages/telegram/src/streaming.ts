@@ -181,7 +181,14 @@ export class TelegramRunStreamer {
       await this.transport.editMessage(chatId, state.progressMessageId, statusText, stopButton);
       state.lastEditAt = now;
     } catch {
-      state.lastEditAt = now;
+      try {
+        const sent = await this.transport.sendMessage(chatId, statusText, stopButton);
+        state.progressMessageId = sent.messageId;
+      } catch (error) {
+        console.warn(`[TelegramRunStreamer] updateProgress fallback send failed:`, String(error));
+      } finally {
+        state.lastEditAt = now;
+      }
     }
   }
 }
