@@ -213,6 +213,9 @@ function cleanEnvForEngine(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 
 function formatFriendlyError(errorMsg: string): string {
   const lower = errorMsg.toLowerCase();
+  if (lower.includes("invalid `signature` in `thinking` block") || lower.includes("invalid `signature` in `thinking`")) {
+    return "Claude session state is incompatible (thinking signature error). I reset the session — please retry your message.";
+  }
   if (lower.includes("rate limit") || lower.includes("rate_limit") || lower.includes("429") || lower.includes("too many requests")) {
     return "Rate limit hit. Wait a moment and try again.";
   }
@@ -719,16 +722,26 @@ export async function startLongPolling(token: string): Promise<void> {
     }
 
     // Notify user of failure
-    if (execResult.exitStatus === "error" && chatId !== undefined) {
+    if (execResult.exitStatus === "error") {
       const errorEvents = execResult.events.filter((e) => e.type === "error");
       const errorMsg = errorEvents.length > 0
         ? (errorEvents[0] as { message?: string }).message ?? "Unknown error"
         : "Unknown error";
-      const friendlyMsg = formatFriendlyError(errorMsg);
-      await notifyChat(chatId, friendlyMsg);
+
+      if (errorMsg.includes("Invalid `signature` in `thinking` block")) {
+        await repository.setSessionEngineSessionId({
+          sessionId: session.id,
+          engineSessionId: null,
+        });
+      }
+
+      if (chatId !== undefined) {
+        const friendlyMsg = formatFriendlyError(errorMsg);
+        await notifyChat(chatId, friendlyMsg);
+      }
     }
 
-    if (execResult.engineSessionId) {
+    if (execResult.engineSessionId && execResult.exitStatus !== "error") {
       await repository.setSessionEngineSessionId({
         sessionId: session.id,
         engineSessionId: execResult.engineSessionId,
